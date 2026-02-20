@@ -1,0 +1,65 @@
+## T074: Kubernetes Deployment + Service with Dapr annotations
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-analyst-fte
+  namespace: agent-factory
+  labels:
+    app: research-analyst-fte
+    layer: digital-fte
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: research-analyst-fte
+  template:
+    metadata:
+      labels:
+        app: research-analyst-fte
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "research-analyst"
+        dapr.io/app-port: "8000"
+        dapr.io/enable-api-logging: "true"
+    spec:
+      runtimeClassName: gvisor
+      containers:
+        - name: research-analyst
+          image: research-analyst-fte:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+          envFrom:
+            - secretRef:
+                name: research-analyst-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-analyst-fte
+  namespace: agent-factory
+spec:
+  selector:
+    app: research-analyst-fte
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP

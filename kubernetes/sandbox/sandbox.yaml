@@ -1,0 +1,42 @@
+## T073: Agent Sandbox CRD for gVisor runtime
+apiVersion: security.agentfactory.dev/v1alpha1
+kind: AgentSandbox
+metadata:
+  name: research-analyst-sandbox
+  namespace: agent-factory
+spec:
+  runtimeClass: gvisor
+  resources:
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+  networkPolicy:
+    egress:
+      - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+        ports:
+          - protocol: TCP
+            port: 443  # HTTPS for LLM APIs and web search
+          - protocol: TCP
+            port: 80
+      - to:
+          - podSelector:
+              matchLabels:
+                app: redis
+        ports:
+          - protocol: TCP
+            port: 6379
+      - to:
+          - podSelector:
+              matchLabels:
+                app: kafka
+        ports:
+          - protocol: TCP
+            port: 9092
+  seccompProfile: RuntimeDefault
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false

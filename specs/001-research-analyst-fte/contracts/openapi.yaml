@@ -1,0 +1,475 @@
+openapi: 3.1.0
+info:
+  title: Research Analyst Digital FTE API
+  description: |
+    REST + A2A API for the Research Analyst Digital FTE.
+    Provides task submission, status polling, artifact retrieval,
+    human approval workflows, and A2A inter-agent collaboration.
+  version: 1.0.0
+  contact:
+    name: Agent Factory
+    url: https://agentfactory.dev
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  # --- Task Management ---
+  /tasks:
+    post:
+      operationId: submitTask
+      summary: Submit a research task
+      description: Accept a research query and start the 5-agent research pipeline.
+      tags: [Tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRequest'
+      responses:
+        '202':
+          description: Task accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskAccepted'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited / busy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tasks/{task_id}/status:
+    get:
+      operationId: getTaskStatus
+      summary: Get task status
+      tags: [Tasks]
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatusResponse'
+        '404':
+          description: Task not found
+
+  /tasks/{task_id}/artifacts:
+    get:
+      operationId: getTaskArtifacts
+      summary: Get task output artifacts
+      tags: [Tasks]
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of artifacts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactListResponse'
+        '404':
+          description: Task not found
+
+  /tasks/{task_id}/artifacts/{artifact_name}:
+    get:
+      operationId: downloadArtifact
+      summary: Download a specific artifact
+      tags: [Tasks]
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: artifact_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Artifact not found
+
+  # --- Human Approval Workflows ---
+  /workflows/{workflow_id}/approve:
+    post:
+      operationId: approveWorkflow
+      summary: Approve or reject a workflow stage
+      tags: [Workflows]
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+      responses:
+        '200':
+          description: Approval processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalResponse'
+        '404':
+          description: Workflow not found
+        '409':
+          description: Workflow not in awaiting_approval state
+
+  /workflows/{workflow_id}/status:
+    get:
+      operationId: getWorkflowStatus
+      summary: Get detailed workflow status
+      tags: [Workflows]
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow status with stage details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStatusResponse'
+
+  # --- A2A Protocol ---
+  /.well-known/agent.json:
+    get:
+      operationId: getAgentCard
+      summary: A2A Agent Card discovery
+      tags: [A2A]
+      responses:
+        '200':
+          description: Agent Card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCard'
+
+  /a2a:
+    post:
+      operationId: a2aEndpoint
+      summary: A2A JSON-RPC 2.0 endpoint
+      description: |
+        Accepts A2A protocol methods: tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe.
+      tags: [A2A]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonRpcRequest'
+      responses:
+        '200':
+          description: JSON-RPC response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+
+  # --- Health & Metrics ---
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      tags: [Operations]
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics
+      tags: [Operations]
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  schemas:
+    TaskRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 10
+          maxLength: 5000
+          description: The research question or topic
+        require_approval:
+          type: boolean
+          default: false
+          description: Enable human-in-the-loop approval gates
+        budget_limit_usd:
+          type: number
+          format: float
+          minimum: 0.01
+          maximum: 100.0
+          default: 1.0
+          description: Maximum LLM cost for this task
+        priority:
+          type: string
+          enum: [P1, P2, P3]
+          default: P2
+        metadata:
+          type: object
+          additionalProperties: true
+
+    TaskAccepted:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: accepted
+        workflow_instance_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TaskStatusResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [accepted, planning, sourcing, analyzing, verifying, reporting, completed, failed, awaiting_approval, rejected, budget_exceeded]
+        current_stage:
+          type: string
+          enum: [planner, source_finder, content_analyzer, fact_checker, report_writer]
+          nullable: true
+        progress_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        approval_pending:
+          type: object
+          nullable: true
+          properties:
+            stage:
+              type: string
+            data:
+              type: object
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ArtifactListResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        artifacts:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              content_type:
+                type: string
+              size_bytes:
+                type: integer
+              download_url:
+                type: string
+
+    ApprovalRequest:
+      type: object
+      required: [approved]
+      properties:
+        approved:
+          type: boolean
+        reason:
+          type: string
+          description: Reason for approval/rejection
+        modifications:
+          type: object
+          description: Optional modifications to the plan/output
+
+    ApprovalResponse:
+      type: object
+      properties:
+        workflow_id:
+          type: string
+        status:
+          type: string
+          example: resumed
+        message:
+          type: string
+
+    WorkflowStatusResponse:
+      type: object
+      properties:
+        workflow_id:
+          type: string
+        runtime_status:
+          type: string
+        current_stage:
+          type: string
+        stages_completed:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        last_updated_at:
+          type: string
+          format: date-time
+
+    AgentCard:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+        version:
+          type: string
+        capabilities:
+          type: object
+          properties:
+            streaming:
+              type: boolean
+            pushNotifications:
+              type: boolean
+            stateTransitionHistory:
+              type: boolean
+        defaultInputModes:
+          type: array
+          items:
+            type: string
+        defaultOutputModes:
+          type: array
+          items:
+            type: string
+        skills:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+        provider:
+          type: object
+          properties:
+            organization:
+              type: string
+            url:
+              type: string
+
+    JsonRpcRequest:
+      type: object
+      required: [jsonrpc, id, method, params]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          type: string
+        method:
+          type: string
+          enum: [tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe]
+        params:
+          type: object
+
+    JsonRpcResponse:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+        id:
+          type: string
+        result:
+          type: object
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data:
+              type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+        code:
+          type: string

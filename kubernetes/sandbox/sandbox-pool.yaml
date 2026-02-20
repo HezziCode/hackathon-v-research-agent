@@ -1,0 +1,11 @@
+## T073: Pre-warmed sandbox pool for fast agent startup
+apiVersion: security.agentfactory.dev/v1alpha1
+kind: AgentSandboxPool
+metadata:
+  name: research-analyst-pool
+  namespace: agent-factory
+spec:
+  sandboxTemplate: research-analyst-sandbox
+  minReady: 2
+  maxSize: 5
+  ttlSecondsAfterIdle: 300

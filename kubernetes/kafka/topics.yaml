@@ -1,0 +1,23 @@
+## T041: Kafka topic definitions for Research Analyst FTE
+##
+## Topics are auto-created by Kafka in dev (docker-compose),
+## but this file documents the schema for production setup.
+
+# Status updates — real-time pipeline progress
+# Producer: workflow activities
+# Consumer: API layer (status polling), external dashboards
+topic: fte.status.updates
+partitions: 3
+replication-factor: 1
+retention.ms: 604800000  # 7 days
+
+---
+
+# Audit trail — immutable record of all FTE actions
+# Producer: workflow activities
+# Consumer: compliance/audit systems
+# Retention: 7 years per Principle VIII
+topic: fte.audit.actions
+partitions: 3
+replication-factor: 1
+retention.ms: 220752000000  # ~7 years
