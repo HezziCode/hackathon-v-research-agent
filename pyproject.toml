@@ -5,6 +5,8 @@ description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.83.0",
+    "dapr>=1.16.1",
+    "dapr-ext-workflow>=1.16.1",
     "fastapi>=0.129.0",
     "httpx>=0.28.1",
     "markdown>=3.10.2",
